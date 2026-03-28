@@ -12,6 +12,7 @@ from torch.utils.data import Subset
 from torchvision.models import MobileNet_V2_Weights
 import torch.optim as optim
 import multiprocessing
+import json
 
 
 def main():
@@ -19,43 +20,78 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # applying transformation
-    transform = transforms.Compose([
+
+    train_transform = transforms.Compose([
+        transforms.RandomResizedCrop(224, scale=(0.5, 1.0)),  # zoom in/out
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.RandomVerticalFlip(p=0.2),  # leaves can flip
+        transforms.RandomRotation(35),
+
+        transforms.ColorJitter(
+            brightness=0.6,
+            contrast=0.6,
+            saturation=0.6,
+            hue=0.15
+        ),
+
+        transforms.RandomGrayscale(p=0.1),  # bad lighting
+        transforms.GaussianBlur(kernel_size=3),
+
+        transforms.RandomPerspective(distortion_scale=0.4, p=0.3),  # weird angles
+
+        transforms.ToTensor(),
+
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225]
+        )
+    ])
+    val_transform = transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225]
-                             )
+                             std=[0.229, 0.224, 0.225])
     ])
 
     # splitting the train data further for optuna
-    dataset = ImageFolder(root="PlantVillage/train", transform=transform)
-    targets = dataset.targets
-    # print(len(targets))
-    indices = list(range(len(dataset)))
-    train_idx, test_idx = train_test_split(indices, test_size=0.2, stratify=targets, random_state=42)
+    train_base = ImageFolder(root="PlantVillage/train", transform=train_transform)
+    test_base = ImageFolder(root="PlantVillage/train", transform=val_transform)
 
+    with open("classes.json", "w") as f:
+        json.dump(train_base.classes, f)
+        print("classes loaded")
+
+    targets = train_base.targets
+    indices = list(range(len(train_base)))
+
+    train_idx, test_idx = train_test_split(
+        indices, test_size=0.2, stratify=targets, random_state=42
+    )
+
+    train_dataset = Subset(train_base, train_idx)
+    test_dataset = Subset(test_base, test_idx)
+
+    val_dataset = ImageFolder(root="PlantVillage/val", transform=val_transform)
     # train dataset and dataloader for optuna
-    train_dataset = Subset(dataset, train_idx)
     train_dataloader = DataLoader(train_dataset, batch_size=64, shuffle=True, pin_memory=True,num_workers=2)
-
     # validation dataset and data loader for optuna
-    val_dataset = ImageFolder(root="PlantVillage/val", transform=transform)
     val_dataloader = DataLoader(val_dataset, batch_size=64, pin_memory=True,num_workers=2)
-
     # test dataset for final check (accuracy)
-    test_dataset = Subset(dataset, test_idx)
     test_dataloader = DataLoader(test_dataset, batch_size=64, pin_memory=True,num_workers=2)
+
+    print(len(train_base.classes))
+    print(len(test_base.classes))
 
 
 
     class MobileNetV2(nn.Module):
-        def __init__(self, neurons_per_hidden_layer, dropout):
+        def __init__(self, neurons_per_hidden_layer, dropout,num_classes):
             super().__init__()
             # loading pretrained mobileNetV2
             self.model = models.mobilenet_v2(weights=MobileNet_V2_Weights.DEFAULT)
             image_channel = self.model.last_channel
             layer = []
-            num_classes = len(dataset.classes)
+
             for neurons in neurons_per_hidden_layer:
                 layer.append(nn.Linear(image_channel, neurons))
                 layer.append(nn.ReLU())
@@ -68,6 +104,7 @@ def main():
         def forward(self, x):
             return self.model(x)
 
+
     """""
 
     def objective(trial):
@@ -79,7 +116,7 @@ def main():
         learning_rate = trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True)
         weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
 
-        mnv2 = MobileNetV2(neurons_per_hidden_layer, dropout)
+        mnv2 = MobileNetV2(neurons_per_hidden_layer, dropout,34)
         mnv2.to(device)
 
         freeze = True
@@ -121,6 +158,7 @@ def main():
             accuracy = (correct / total) * 100
             return accuracy
     
+    
 
     study = optuna.create_study(direction="maximize")
     study.optimize(objective, n_trials=10)
@@ -131,15 +169,15 @@ def main():
     """""
 
 
-    no_of_hidden_layers = 1
-    dropout =  0.3566385293970501
-    neurons_per_hidden_layer =  [56]
-    learning_rate =0.0038547957965633386
-    weight_decay = 3.226844089884423e-06
 
-    model= MobileNetV2(neurons_per_hidden_layer, dropout)
+    dropout =  0.14510733657567784
+    neurons_per_hidden_layer = [72,72,64]
+    learning_rate = 0.007651607466474596/10
+    weight_decay =  2.55740335803366e-05
+
+    model= MobileNetV2(neurons_per_hidden_layer, dropout,34)
     model=model.to(device)
-    freeze = True
+    freeze = False
     if freeze:
         for param in model.model.features.parameters():
             param.requires_grad = False
@@ -179,14 +217,14 @@ def main():
 
         if accuracy > best_accuracy:
             best_accuracy = accuracy
-            torch.save(model.state_dict(), f"best_model.pth")
+            torch.save(model.state_dict(), "modelWeights_dummy.pth")
 
 
 
 
 
     with torch.no_grad():
-        model.load_state_dict(torch.load("best_model.pth", map_location=device))
+        model.load_state_dict(torch.load("modelWeiend.pth", map_location=device))
         model.eval()
         print("testing model now")
 
