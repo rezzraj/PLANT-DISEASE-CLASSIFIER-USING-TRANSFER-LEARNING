@@ -3,6 +3,6 @@ torchvision==0.17.0
 streamlit
 Pillow
 numpy
-opencv-python
+opencv-python-headless
 scikit-learn
 optuna
