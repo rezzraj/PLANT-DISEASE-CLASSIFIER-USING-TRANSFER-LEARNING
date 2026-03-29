@@ -2,15 +2,15 @@ import streamlit as st
 from PIL import Image
 from backend import predict
 
-st.set_page_config(page_title="Plant Disease Detector 🌱")
+st.set_page_config(page_title="Plant Disease Detector ")
 
-st.title("🌱 Plant Disease Detector")
+st.title(" Plant Disease Detector")
 
 # upload option
-uploaded_file = st.file_uploader("Upload Image 📁", type=["jpg", "png", "jpeg"])
+uploaded_file = st.file_uploader("Upload Image ", type=["jpg", "png", "jpeg"])
 
 # camera option
-camera_image = st.camera_input("Take Photo 📸")
+camera_image = st.camera_input("Take Photo ")
 
 image = None
 

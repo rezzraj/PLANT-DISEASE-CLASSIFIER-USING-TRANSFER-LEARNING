@@ -56,6 +56,14 @@ def main():
     # splitting the train data further for optuna
     train_base = ImageFolder(root="PlantVillage/train", transform=train_transform)
     test_base = ImageFolder(root="PlantVillage/train", transform=val_transform)
+    from collections import Counter
+
+    counts = Counter(train_base.targets)
+
+    print("\nCLASS DISTRIBUTION:\n")
+
+    for idx, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
+        print(f"{idx} -> {train_base.classes[idx]} : {count}")
 
     with open("classes.json", "w") as f:
         json.dump(train_base.classes, f)
@@ -70,6 +78,7 @@ def main():
 
     train_dataset = Subset(train_base, train_idx)
     test_dataset = Subset(test_base, test_idx)
+
 
     val_dataset = ImageFolder(root="PlantVillage/val", transform=val_transform)
     # train dataset and dataloader for optuna
